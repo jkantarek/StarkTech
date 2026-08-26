@@ -1,22 +1,17 @@
-#include <Adafruit_NeoPixel.h>
-#define PIN 6
-#define N 24
-Adafruit_NeoPixel ring(N, PIN, NEO_GRBW + NEO_KHZ800);
+// markJArmor — Iron Man armor firmware.
+//
+// The sketch is now a thin entry point: hardware work lives in src/subsystems
+// (ChestBuster owns the NeoPixel ring, SonicCannon/InputToggles are stubbed)
+// and the run loop is a millis()-based state machine in src/state (Mode +
+// Machine). No blocking delay() calls remain.
+#include "src/state/Machine.h"
+
+Machine machine;
 
 void setup() {
-  Serial.begin(9600);
-  ring.begin();
-  ring.clear();
-  Serial.println(F("start"));
+  machine.setup();
 }
 
 void loop() {
-  static int i = 1;                 // grow from 1..N
-  Serial.print(F("set ")); Serial.println(i);
-  ring.setPixelColor(i, ring.Color(3, 3, 3));  // 1%
-  ring.show();
-  Serial.println(F("done"));
-  i++;
-  if (i >= N) i = 1;               // wrap, stay minimal
-  delay(1000);
+  machine.update();
 }
