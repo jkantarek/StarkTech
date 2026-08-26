@@ -2,13 +2,10 @@
 
 namespace {
 
-// How long the suit rests in STANDBY before "breathing" into ACTIVATED on its
-// own, so the demo is time-driven even with no button wired. A real fire
-// toggle jumps in instantly regardless of this window.
+// How long STANDBY holds before auto-activating. STANDBY is only entered by
+// future input (nothing does today), but if we ever land there this keeps the
+// machine from wedging; a real fire toggle jumps in instantly.
 constexpr uint32_t kStandbyHoldMs = 3000;
-
-// How long the reaction (chest ring animation) persists once entered.
-constexpr uint32_t kActivatedHoldMs = 4000;
 
 }  // namespace
 
@@ -24,9 +21,10 @@ Mode next(Mode current, const uint32_t elapsedInMode, const InputToggles& input)
       return Mode::STANDBY;
 
     case Mode::ACTIVATED:
-      if (elapsedInMode >= kActivatedHoldMs) {
-        return Mode::STANDBY;
-      }
+      // Persist: the old time-based return to STANDBY is what paused the
+      // ring every few seconds. Leaving ACTIVATED is reserved for future
+      // input-driven transitions (see InputToggles).
+      (void)elapsedInMode;
       return Mode::ACTIVATED;
 
     default:

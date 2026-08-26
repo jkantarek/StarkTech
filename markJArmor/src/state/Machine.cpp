@@ -6,11 +6,20 @@ void Machine::setup() {
   Serial.begin(9600);
   Serial.println(F("start"));
 
-  _chest.begin();
-  _sonic.setup();
+  //_input.setup();  // prints its own progress
+  _chest.setup();  // prints its own progress
+  //_sonic.setup();  // prints its own progress
 
-  _mode = Mode::STANDBY;
+  _mode = Mode::ACTIVATED;
   _modeStartMs = millis();
+  Serial.println(F("machine: ready"));
+
+  // Drain our TX, then give the host a quiet window to receive the full boot
+  // block before update() starts. Setup-only pause (never in the loop): if a
+  // reset-cut happens later, every boot line still arrives intact so the log
+  // bisects setup() vs update() cleanly.
+  Serial.flush();
+  delay(500);
 }
 
 void Machine::update() {

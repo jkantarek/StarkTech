@@ -11,6 +11,10 @@
 // the harness exists.
 class InputToggles {
  public:
+  // Initialize input pins and report progress. Call once from Machine::setup.
+  // STUBBED: no pins wired yet; reports the stub state.
+  void setup();
+
   // Sample the hardware inputs. Call once per machine tick.
   void update();
 

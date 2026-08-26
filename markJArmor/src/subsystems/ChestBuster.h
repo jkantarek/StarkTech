@@ -12,8 +12,9 @@ class ChestBuster {
  public:
   ChestBuster();
 
-  // Initialize hardware (ring.begin). Call once from Machine::setup.
-  void begin();
+  // Initialize hardware (ring.begin, blank first frame) and report progress.
+  // Call once from Machine::setup.
+  void setup();
 
   // Advance the animation if STEP_MS has elapsed since the last step.
   void update(const uint32_t now);
@@ -25,5 +26,8 @@ class ChestBuster {
 
   Adafruit_NeoPixel _ring;
   uint32_t _lastStepMs;
-  uint16_t _i;  // pixel being lit this pass, grows 1..kPixels then wraps
+  // Index of the pixel lit on the next tick (0..kPixels-1: every LED).
+  // Wrapping resets to 0; the next pass overwrites the previous one
+  // (reference colorWipe style — no clear, no blank pulse).
+  uint16_t _i;
 };

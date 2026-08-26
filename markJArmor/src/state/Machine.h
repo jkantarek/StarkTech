@@ -27,7 +27,9 @@ class Machine {
  private:
   void enterMode(const Mode next, const uint32_t now);
 
-  Mode _mode = Mode::STANDBY;
+  // Boot straight into the demo: the crawl runs gapless from power-up.
+  // STANDBY is a future rest state, reachable only via input.
+  Mode _mode = Mode::ACTIVATED;
   uint32_t _modeStartMs = 0;  // millis() when the current mode was entered
 
   InputToggles _input;
