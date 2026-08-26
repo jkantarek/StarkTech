@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Build + upload the markJArmor sketch to the Mega in one go.
+# Uses raw avrdude because this board's original ATmegaBOOT speaks
+# stk500v1 @ 57600; arduino-cli upload defaults to stk500v2 @ 115200
+# which cannot sync. (-c arduino = stk500v1 + DTR-reset dance.)
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"          # StarkTech/
+SKETCH_DIR="$ROOT/markJArmor"
+FQBN="arduino:avr:mega"
+PORT="${BRANT_PORT:-/dev/ttyUSB0}"
+AVRDUDE="$HOME/.arduino15/packages/arduino/tools/avrdude/8.0.0-arduino1/bin/avrdude"
+CONF="$(dirname "$AVRDUDE")/../etc/avrdude.conf"
+HEX=/tmp/markJArmor_build/markJArmor.ino.hex
+
+echo "Compiling $SKETCH_DIR ..."
+arduino-cli compile --fqbn "$FQBN" "$SKETCH_DIR" --build-path /tmp/markJArmor_build \
+  | grep -v postinstall | tail -2
+[ -f "$HEX" ] || { echo "Build produced no hex"; exit 1; }
+
+AVRDUDE_CMD=( "$AVRDUDE" -C "$CONF" -p atmega1280 -c arduino -P "$PORT" -b 57600 \
+              -U flash:w:"$HEX":i )
+
+if [ -r "$PORT" ] && [ -w "$PORT" ]; then
+  "${AVRDUDE_CMD[@]}"
+elif [ -x /usr/bin/sg ]; then
+  # Current shell may predate the dialout group; re-exec the avrdude command
+  # under the group. Build the command string safely with %q.
+  CMD=""
+  for a in "${AVRDUDE_CMD[@]}"; do CMD+="$(printf '%q ' "$a")"; done
+  /usr/bin/sg dialout -c "$CMD"
+else
+  echo "No access to $PORT (need dialout group)." >&2
+  exit 1
+fi

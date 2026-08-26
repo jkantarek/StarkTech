@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Recover flash/EEPROM/fuses from the Brant Mega (ATmega1280) into
+# Brant/recovery/<YYYY-MM-DD>/. Reads only — never writes to the chip.
+# Also produces a disassembly and printable-string extraction.
+#
+# Proven recipe (2026-08-25): the original ATmegaBOOT speaks stk500v1 @ 57600,
+# NOT optiboot. The 'arduino' programmer type (stk500v1 + avrdude's own DTR
+# reset at connect) syncs reliably. External DTR pulses disturb the line
+# speed and desync the read, so none are used.
+set -u
+
+# --- config ---------------------------------------------------------------
+PORT="${BRANT_PORT:-/dev/ttyUSB0}"
+PROG="${BRANT_PROG:-arduino}"
+BAUD="${BRANT_BAUD:-57600}"
+AVRDUDE=/home/jkantarek/.arduino15/packages/arduino/tools/avrdude/8.0.0-arduino1/bin/avrdude
+CONF=$(dirname "$AVRDUDE")/../etc/avrdude.conf
+OBJCOPY=/home/jkantarek/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-objcopy
+OBJDUMP=/home/jkantarek/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-objdump
+
+DATE="$(date +%F)"
+DIR="$HOME/Development/StarkTech/Brant/recovery/$DATE"
+mkdir -p "$DIR"
+cd "$DIR" || exit 1
+echo "Recovering board into $DIR"
+
+# --- helpers --------------------------------------------------------------
+sg_cmd() {  # serialize argv safely, run under dialout via newgrp
+  local cmd=""
+  for a in "$@"; do cmd+="$(printf '%q ' "$a")"; done
+  /usr/bin/sg dialout -c "$cmd"
+}
+
+run_group() {  # run argv under dialout group when current shell lacks access
+  if [ -r "$PORT" ] && [ -w "$PORT" ]; then "$@"
+  elif [ -x /usr/bin/sg ]; then sg_cmd "$@"
+  else echo "No port access: need dialout group (sudo usermod -aG dialout \$USER)"; exit 1; fi
+}
+
+# --- dump -----------------------------------------------------------------
+if run_group \
+    "$AVRDUDE" -C "$CONF" -p atmega1280 -c "$PROG" -P "$PORT" -b "$BAUD" \
+      -U flash:r:flash.hex:i \
+      -U flash:r:flash.bin:r \
+      -U eeprom:r:eeprom.hex:i \
+      -U lfuse:r:lfuse.txt:h \
+      -U hfuse:r:hfuse.txt:h \
+      -U efuse:r:efuse.txt:h \
+      -U lock:r:lock.txt:h \
+      >avrdude.log 2>&1; then
+  :
+else
+  echo "FAILED to sync bootloader. Log tail:"
+  tail -12 avrdude.log
+  exit 1
+fi
+
+if ! grep -q "Device signature" avrdude.log \
+   && [ ! -s flash.bin ]; then
+  echo "No device signature and no flash.bin — dump failed:"
+  tail -12 avrdude.log
+  exit 1
+fi
+echo "Flash dump present:"
+wc -c flash.bin
+
+# --- analysis -------------------------------------------------------------
+echo "Building disassembly and strings..."
+"$OBJCOPY" -I ihex -O elf32-avr -B avr5 flash.hex flash.elf 2>/dev/null \
+  || "$OBJCOPY" -I ihex -O elf32-avr flash.hex flash.elf
+"$OBJDUMP" -D -m avr5 flash.elf > flash.dis
+strings -n 4 flash.bin > strings.txt
+
+echo
+echo "Done:"
+ls -l "$DIR"
+echo "(fuse/lock values + signature in avrdude.log)"

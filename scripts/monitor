@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Brant board monitor — Si4735 radio sketch on first-gen Arduino Mega 1280.
+# Wraps arduino-cli monitor; auto-installs the arduino:avr core (ships the
+# serial monitor plugin) and falls back to the dialout group when the current
+# shell doesn't have port access.
+set -euo pipefail
+
+PORT="${BRANT_PORT:-/dev/ttyUSB0}"
+BAUD="${BRANT_BAUD:-9600}"
+FQBN="${BRANT_FQBN:-arduino:avr:mega}"
+
+# Serial monitor plugin ships with the arduino:avr core.
+if ! arduino-cli core list 2>/dev/null | grep -q '^arduino:avr '; then
+  echo "Installing arduino:avr core (provides the serial monitor plugin)..." >&2
+  arduino-cli core install arduino:avr
+fi
+
+if [ -r "$PORT" ] && [ -w "$PORT" ]; then
+  exec arduino-cli monitor -p "$PORT" -c baudrate="$BAUD" -q --timestamp
+elif [ -x /usr/bin/sg ]; then
+  # Current shell predates the dialout group change; re-exec under it.
+  exec /usr/bin/sg dialout -c "arduino-cli monitor -p '$PORT' -c baudrate=$BAUD -q --timestamp"
+else
+  echo "No read/write access to $PORT (need the dialout group) and no sg available." >&2
+  echo "Fix: sudo usermod -aG dialout \$USER   then log out and back in." >&2
+  exit 1
+fi

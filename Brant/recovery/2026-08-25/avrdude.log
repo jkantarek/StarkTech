@@ -1,0 +1,33 @@
+
+Processing -U flash:r:flash.hex:i
+Reading flash memory ...
+Reading | ################################################## | 100% 38.52s
+Writing 131072 bytes to output file flash.hex
+
+Processing -U flash:r:flash.bin:r
+Reading flash memory ...
+Reading | ################################################## | 100% 38.52s
+Writing 131072 bytes to output file flash.bin
+
+Processing -U eeprom:r:eeprom.hex:i
+Reading eeprom memory ...
+Reading | ################################################## | 100% 16.38s
+Writing 4096 bytes to output file eeprom.hex
+
+Processing -U lfuse:r:lfuse.txt:h
+Reading lfuse memory ...
+Writing 1 byte to output file lfuse.txt
+
+Processing -U hfuse:r:hfuse.txt:h
+Reading hfuse memory ...
+Writing 1 byte to output file hfuse.txt
+
+Processing -U efuse:r:efuse.txt:h
+Reading efuse memory ...
+Writing 1 byte to output file efuse.txt
+
+Processing -U lock:r:lock.txt:h
+Reading lock memory ...
+Writing 1 byte to output file lock.txt
+
+Avrdude done.  Thank you.
