@@ -29,21 +29,14 @@ void ChestBuster::update(const uint32_t now) {
 
   // Step-timer reset — visible on serial per the bisect request. now is
   // millis(); delta (now - last) is the actual elapsed time, always >= 1000.
-  Serial.print(F("tick t="));
-  Serial.print(now);
-  Serial.print(F(" last="));
-  Serial.print(_lastStepMs);
-  Serial.print(F(" delta="));
-  Serial.println(now - _lastStepMs);
   _lastStepMs = now;
 
-  // Step prints restored: the original sketch that WORKED had Serial around
-  // the strip ops; the print-free build crashed. Keep original parity here.
-  Serial.print(F("set "));
+  if(_animation->step(_frame) > 0) {
+  Serial.print(F("ChestBuster.set "));
   Serial.println(_animation->step(_frame));  // advance + fill the frame
+  }
   for (uint16_t i = 0; i < kPixels; ++i) {
     _ring.setPixelColor(i, _frame[i]);  // 4% brightness via setBrightness
   }
   _ring.show();
-  Serial.println(F("done"));
 }

@@ -31,7 +31,7 @@ class ChestBuster {
  private:
   static constexpr uint16_t kPin = 6;
   static constexpr uint16_t kPixels = 24;
-  static constexpr uint32_t kStepMs = 10;  // former delay(1000)
+  static constexpr uint32_t kStepMs = 100;  // former delay(1000)
 
   // Per-step color frame, sized for the ring.
   uint32_t _frame[kPixels];
