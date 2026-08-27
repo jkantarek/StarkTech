@@ -20,12 +20,15 @@ FQBN      = arduino:avr:mega
 
 REAL_SRCS = src/state/Machine.cpp src/state/Mode.cpp \
             src/subsystems/ChestBuster.cpp src/subsystems/InputToggles.cpp \
-            src/subsystems/SonicCannon.cpp
+            src/subsystems/SonicCannon.cpp \
+            src/subsystems/ChestBuster/Animations/AnimationOff.cpp \
+            src/subsystems/ChestBuster/Animations/LoaderBlueToGreen.cpp
 
 .PHONY: test verify clean
 
-test: $(BUILD)/mode_test $(BUILD)/machine_test
+test: $(BUILD)/mode_test $(BUILD)/animation_test $(BUILD)/machine_test
 	$(BUILD)/mode_test
+	$(BUILD)/animation_test
 	$(BUILD)/machine_test
 	@echo "SUITE PASS"
 
@@ -35,6 +38,14 @@ verify: test
 # mode_test links the real Mode + InputToggles sources; InputToggles.cpp uses
 # Serial (Arduino.h) for its progress line, so it needs the tiny Arduino seam.
 $(BUILD)/mode_test: $(TESTDIR)/mode_test.cpp src/state/Mode.cpp src/subsystems/InputToggles.cpp
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) $(MOCKS) -I. $^ -o $@
+
+# animation_test links only the pure-logic animation classes (no mocks):
+# per-step full-frame rendering, packing, wrap semantics.
+$(BUILD)/animation_test: $(TESTDIR)/animation_test.cpp \
+    src/subsystems/ChestBuster/Animations/AnimationOff.cpp \
+    src/subsystems/ChestBuster/Animations/LoaderBlueToGreen.cpp
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) $(MOCKS) -I. $^ -o $@
 

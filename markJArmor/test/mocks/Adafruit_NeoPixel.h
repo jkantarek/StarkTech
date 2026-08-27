@@ -18,8 +18,12 @@ class Adafruit_NeoPixel {
   void setBrightness(uint8_t) {}
   void clear() { log.push_back(-1); }
   void show() {}
-  void setPixelColor(uint16_t n, uint32_t) { log.push_back((int)n); }
-  uint32_t Color(uint8_t, uint8_t, uint8_t) { return 0; }
+  void setPixelColor(uint16_t n, uint32_t c) { log.push_back((int)n); }
+  // Static, like the real lib: (w<<24)|(r<<16)|(g<<8)|b regardless of strip
+  // wire order (here the ring is NEO_GRBW so white = 0).
+  static uint32_t Color(uint8_t r, uint8_t g, uint8_t b) {
+    return ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+  }
 
   static std::vector<int> log;  // -1 = clear, 0.. = pixel index written
 };

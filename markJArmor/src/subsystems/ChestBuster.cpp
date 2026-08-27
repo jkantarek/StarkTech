@@ -4,7 +4,7 @@
 
 ChestBuster::ChestBuster() : _ring(kPixels, kPin, NEO_GRBW + NEO_KHZ800) {}
 
-void ChestBuster::setup() {
+void ChestBuster::setup(cb::Animation* animation) {
   _ring.begin();
   Serial.println(F("ring.begin - OK"));
   // Dim the strip to ~4% — the original that NEVER crashed ran 1% (3,3,3) at
@@ -17,7 +17,8 @@ void ChestBuster::setup() {
   //_ring.show();
   Serial.println(F("ring.boot - SKIPPED (bisect)"));
   _lastStepMs = 0;
-  _i = 0;  // LED index 0 = LED #1; pass covers all kPixels LEDs
+  _animation = animation;
+  _animation->begin(kPixels);
   Serial.println(F("chest: ring ok (24 px @ pin 6, off)"));
 }
 
@@ -39,22 +40,10 @@ void ChestBuster::update(const uint32_t now) {
   // Step prints restored: the original sketch that WORKED had Serial around
   // the strip ops; the print-free build crashed. Keep original parity here.
   Serial.print(F("set "));
-  Serial.println(_i);
-  _ring.setPixelColor(_i, _ring.Color(0, 0+_i*10, 255-(_i*10)));  // 1%
+  Serial.println(_animation->step(_frame));  // advance + fill the frame
+  for (uint16_t i = 0; i < kPixels; ++i) {
+    _ring.setPixelColor(i, _frame[i]);  // 4% brightness via setBrightness
+  }
   _ring.show();
   Serial.println(F("done"));
-
-  _i++;  // uint16_t, bounded by the wrap check below — cannot overflow.
-  if (_i >= kPixels) {
-    // Wrap check fires at _i == 24. `_i` here is the value AFTER the show
-    // and increment — pixel 23 was the last lit, and we reset before the
-    // next tick so the pass restarts at index 0.
-    Serial.print(F("wrap: i was "));
-    Serial.print(_i);
-    Serial.println(F(" -> reset to 0 (restart)"));
-    for (uint16_t x = 0; x < kPixels; x++) {
-      _ring.setPixelColor(x, _ring.Color(0, 0, 0));
-    } 
-    _i = 0;
-  }
 }

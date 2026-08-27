@@ -4,14 +4,16 @@
 // are test/mocks/Arduino.h (F, millis, Serial) and test/mocks/
 // Adafruit_NeoPixel.h (records writes). See Makefile.
 //
-// Contract under test (src/subsystems/ChestBuster.cpp as committed 4b4c779):
-//   - setup: begin + setBrightness only — NO recorded writes, no boot show
-//   - fast cadence (kStepMs = 10): each tick writes one pixel (gradient),
-//     showing the full pass over indices 0..23
-//   - on wrap (after pixel 23) the pixels are reset MANUALLY to 0,0,0 via a
-//     write loop — the library's clear() is never used. Matches the code's
-//     `x < kPixels` loop exactly: 24 writes at indices 0..23.
-//   - the sweep restarts at index 0; mode stays ACTIVATED
+// Contract under test (src/subsystems/ChestBuster.cpp refactored: setup takes
+// an Animation, update renders it):
+//   - setup: begin + setBrightness + attach the loader animation only — NO
+//     recorded writes, no boot transmission
+//   - fast cadence (kStepMs = 10): each tick renders ONE FULL FRAME — the
+//     update loop calls ring.setPixelColor(i, frame[i]) for every index
+//     0..23, then show(). So every tick records 24 writes, indices 0..23.
+//   - 25 ticks (t=100..340) = one loader pass (24 build ticks) + the wrap
+//     tick that blanks the frame. Total writes = 25 frames * 24 px = 600.
+//   - the pass restarts at index 0 after the wrap; mode stays ACTIVATED
 #include <cstdio>
 #include <vector>
 
@@ -35,32 +37,22 @@ int main() {
   Machine m;
   m.setup();
 
-  // Boot: no recorded writes — begin()/setBrightness()/show() aren't logged,
-  // and there is no boot transmission in this build.
+  // Boot: no recorded writes — begin()/setBrightness() aren't logged, no boot
+  // transmission in this build, and attaching the animation writes nothing.
   CHECK(Adafruit_NeoPixel::log.empty());
 
-  // Drive 25 ticks at the 10 ms cadence:
-  //   t=100..330 -> pass 1: indices 0..23 (24 single-pixel writes)
-  //   t=330      -> wrap: reset loop writes 0..23 (24 zero-writes)
-  //   t=340      -> pass 2 starts: index 0
-  // Total recorded writes = 24 + 24 + 1 = 49.
+  // Drive 25 ticks at the 10 ms cadence (t=100..340). Each tick renders a
+  // full frame: 24 pixel writes (indices 0..23). 25 * 24 = 600 writes total.
   for (uint32_t t = 100; t <= 340; t += 10) {
     g_now = t;
     m.update();
   }
-  CHECK(Adafruit_NeoPixel::log.size() == 49);
+  CHECK(Adafruit_NeoPixel::log.size() == 600);
 
-  // Pass 1: one write per tick, indices 0..23 — every LED lit once.
-  for (size_t k = 0; k < 24; k++)
-    CHECK(Adafruit_NeoPixel::log[k] == (int)k);
-
-  // Wrap reset: the manual 0,0,0 write loop, indices 0..23 (code uses
-  // `x < kPixels`).
-  for (size_t k = 0; k < 24; k++)
-    CHECK(Adafruit_NeoPixel::log[24 + k] == (int)k);
-
-  // Pass 2 restart at index 0.
-  CHECK(Adafruit_NeoPixel::log[48] == 0);
+  // Every frame writes all 24 pixels in order 0..23 (setPixelColor loop).
+  for (size_t f = 0; f < 25; ++f)
+    for (size_t k = 0; k < 24; ++k)
+      CHECK(Adafruit_NeoPixel::log[f * 24 + k] == (int)k);
 
   // Machine parked in the demo mode — no pause-generating transitions.
   CHECK(m.mode() == Mode::ACTIVATED);

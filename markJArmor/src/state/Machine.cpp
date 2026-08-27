@@ -7,7 +7,7 @@ void Machine::setup() {
   Serial.println(F("start"));
 
   //_input.setup();  // prints its own progress
-  _chest.setup();  // prints its own progress
+  _chest.setup(&_loader);  // prints its own progress; attach the loader
   //_sonic.setup();  // prints its own progress
 
   _mode = Mode::ACTIVATED;

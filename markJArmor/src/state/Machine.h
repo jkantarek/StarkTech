@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "../subsystems/ChestBuster.h"
+#include "../subsystems/ChestBuster/Animations/LoaderBlueToGreen.h"
 #include "../subsystems/InputToggles.h"
 #include "../subsystems/SonicCannon.h"
 #include "Mode.h"
@@ -35,4 +36,5 @@ class Machine {
   InputToggles _input;
   ChestBuster _chest;
   SonicCannon _sonic;
+  cb::LoaderBlueToGreen _loader;  // chest effect, selected at setup
 };
