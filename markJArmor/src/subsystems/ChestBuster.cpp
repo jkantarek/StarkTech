@@ -13,7 +13,7 @@ void ChestBuster::setup() {
   // (every Adafruit example calls setBrightness() — ours never did). One-line
   // test: if the board stops resetting with this, brightness/current was it.
   _ring.setBrightness(50);
-  Serial.println(F("chest: brightness 10 (dimmer)"));
+  Serial.println(F("chest: brightness 50"));
   //_ring.show();
   Serial.println(F("ring.boot - SKIPPED (bisect)"));
   _lastStepMs = 0;
@@ -52,9 +52,8 @@ void ChestBuster::update(const uint32_t now) {
     Serial.print(F("wrap: i was "));
     Serial.print(_i);
     Serial.println(F(" -> reset to 0 (restart)"));
-    int x;
-    for(x=0; x<= kPixels; x++) {
-      _ring.setPixelColor(x, _ring.Color(0,0,0));
+    for (uint16_t x = 0; x < kPixels; x++) {
+      _ring.setPixelColor(x, _ring.Color(0, 0, 0));
     } 
     _i = 0;
   }
