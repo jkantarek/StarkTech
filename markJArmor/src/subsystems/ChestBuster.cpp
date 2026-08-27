@@ -39,7 +39,7 @@ void ChestBuster::update(const uint32_t now) {
   // the strip ops; the print-free build crashed. Keep original parity here.
   Serial.print(F("set "));
   Serial.println(_i);
-  _ring.setPixelColor(_i, _ring.Color(3, 3, 3));  // 1%
+  _ring.setPixelColor(_i, _ring.Color(0, 0+_i*10, 255-(_i*10)));  // 1%
   _ring.show();
   Serial.println(F("done"));
 
