@@ -15,6 +15,7 @@ class Adafruit_NeoPixel {
  public:
   Adafruit_NeoPixel(uint16_t, uint16_t, neoPixelType) {}
   void begin() {}
+  void setBrightness(uint8_t) {}
   void clear() { log.push_back(-1); }
   void show() {}
   void setPixelColor(uint16_t n, uint32_t) { log.push_back((int)n); }

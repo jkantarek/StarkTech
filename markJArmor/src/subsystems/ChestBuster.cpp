@@ -7,12 +7,13 @@ ChestBuster::ChestBuster() : _ring(kPixels, kPin, NEO_GRBW + NEO_KHZ800) {}
 void ChestBuster::setup() {
   _ring.begin();
   Serial.println(F("ring.begin - OK"));
-  // BISECT: boot show() REMOVED — original-parity test. The original sketch
-  // had NO boot transmission (begin + clear only, first show in loop).
-  // Matrix so far: boot-show only => passes; boot+update shows => crashes;
-  // update-show only => UNTESTED (this). If this passes, the crash needs
-  // BOTH a boot frame AND loop frames; if it still crashes, boot show is
-  // exonerated and the next split is blocking vs hot-gate timing.
+  // Dim the strip to ~4% — the original that NEVER crashed ran 1% (3,3,3) at
+  // 1 s. The fast gradient build runs full-saturation colors at 100 frames/s:
+  // bright strip I/O on USB 5V shared with the Mega is the prime reset suspect
+  // (every Adafruit example calls setBrightness() — ours never did). One-line
+  // test: if the board stops resetting with this, brightness/current was it.
+  _ring.setBrightness(50);
+  Serial.println(F("chest: brightness 10 (dimmer)"));
   //_ring.show();
   Serial.println(F("ring.boot - SKIPPED (bisect)"));
   _lastStepMs = 0;
@@ -51,6 +52,10 @@ void ChestBuster::update(const uint32_t now) {
     Serial.print(F("wrap: i was "));
     Serial.print(_i);
     Serial.println(F(" -> reset to 0 (restart)"));
+    int x;
+    for(x=0; x<= kPixels; x++) {
+      _ring.setPixelColor(x, _ring.Color(0,0,0));
+    } 
     _i = 0;
   }
 }
