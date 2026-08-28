@@ -25,7 +25,8 @@ void Machine::setup() {
   Serial.begin(9600);
   Serial.println(F("start"));
 
-  _chest.setup();  // prints its own progress
+  _chest.setup();   // prints its own progress
+  _sonic.setup();   // starts Mozzi (pins 11+12 hifi audio)
 
   _mode = Mode::ACTIVATED;
   _modeStartMs = millis();
@@ -50,12 +51,14 @@ void Machine::update() {
   switch (_mode) {
     case Mode::ACTIVATED:
       _chest.update(now);
-      _sonic.update(now);  // no-op until sound hardware exists
+      _sonic.update(now, true);  // cannon tone
       break;
 
     case Mode::STANDBY:
     default:
-      // No subsystem ticks while resting.
+      // Pump silence in rest modes so the PWM output rests at 0 (no DC
+      // click on mode change).
+      _sonic.update(now, false);
       break;
   }
 
