@@ -4,16 +4,15 @@
 // are test/mocks/Arduino.h (F, millis, Serial) and test/mocks/
 // Adafruit_NeoPixel.h (records writes). See Makefile.
 //
-// Contract under test (src/subsystems/ChestBuster.cpp refactored: setup takes
-// an Animation, update renders it):
-//   - setup: begin + setBrightness + attach the loader animation only — NO
-//     recorded writes, no boot transmission
-//   - fast cadence (kStepMs = 10): each tick renders ONE FULL FRAME — the
-//     update loop calls ring.setPixelColor(i, frame[i]) for every index
-//     0..23, then show(). So every tick records 24 writes, indices 0..23.
-//   - 25 ticks (t=100..340) = one loader pass (24 build ticks) + the wrap
-//     tick that blanks the frame. Total writes = 25 frames * 24 px = 600.
-//   - the pass restarts at index 0 after the wrap; mode stays ACTIVATED
+// Contract under test (src/subsystems/ChestBuster.cpp):
+//   - setup: ring.begin + setBrightness + attach the loader animation only —
+//     NO recorded writes, no boot transmission
+//   - the update() step gate is kStepMs = 100 ms: ticks inside the step
+//     period return without rendering; a tick at/after the boundary renders
+//     ONE FULL FRAME — 24 pixel writes, indices 0..23 — then show()
+//   - driving 25 ticks at a 10 ms cadence (t=100..340) fires exactly 3 steps
+//     (t=100, 200, 300) = 3 frames * 24 px = 72 writes total
+//   - the machine stays in ACTIVATED the whole time (no transitions)
 #include <cstdio>
 #include <vector>
 
@@ -41,16 +40,17 @@ int main() {
   // transmission in this build, and attaching the animation writes nothing.
   CHECK(Adafruit_NeoPixel::log.empty());
 
-  // Drive 25 ticks at the 10 ms cadence (t=100..340). Each tick renders a
-  // full frame: 24 pixel writes (indices 0..23). 25 * 24 = 600 writes total.
+  // Drive 25 ticks at the 10 ms cadence (t=100..340). 100 ms step gate: the
+  // ticks at t=100, 200, 300 each render a full frame (24 pixel writes,
+  // indices 0..23); the 22 in-between ticks return early. 3 * 24 = 72 writes.
   for (uint32_t t = 100; t <= 340; t += 10) {
     g_now = t;
     m.update();
   }
-  CHECK(Adafruit_NeoPixel::log.size() == 600);
+  CHECK(Adafruit_NeoPixel::log.size() == 72);
 
-  // Every frame writes all 24 pixels in order 0..23 (setPixelColor loop).
-  for (size_t f = 0; f < 25; ++f)
+  // Each fired frame writes all 24 pixels in order 0..23 (setPixelColor loop).
+  for (size_t f = 0; f < 3; ++f)
     for (size_t k = 0; k < 24; ++k)
       CHECK(Adafruit_NeoPixel::log[f * 24 + k] == (int)k);
 

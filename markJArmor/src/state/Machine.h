@@ -12,8 +12,9 @@
 //   - owns the current Mode and when it was entered,
 //   - samples inputs, evaluates Mode::next() and switches on change,
 //   - drives only the subsystems relevant to the active Mode.
-// Everything is non-blocking (no delay): subsystems tick off millis().
-// Timers survive millis() wraparound via unsigned arithmetic.
+// The loop is non-blocking: update() never blocks (a one-off delay(500) for
+// the boot block lives in setup()). Subsystems tick off millis(); timers
+// survive millis() wraparound via unsigned arithmetic.
 class Machine {
  public:
   // Serial + subsystem hardware init. Call once from setup().

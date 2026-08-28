@@ -6,18 +6,14 @@ void Machine::setup() {
   Serial.begin(9600);
   Serial.println(F("start"));
 
-  //_input.setup();  // prints its own progress
   _chest.setup(&_loader);  // prints its own progress; attach the loader
-  //_sonic.setup();  // prints its own progress
 
   _mode = Mode::ACTIVATED;
   _modeStartMs = millis();
   Serial.println(F("machine: ready"));
 
-  // Drain our TX, then give the host a quiet window to receive the full boot
-  // block before update() starts. Setup-only pause (never in the loop): if a
-  // reset-cut happens later, every boot line still arrives intact so the log
-  // bisects setup() vs update() cleanly.
+  // Drain TX and pause once so the host receives the full boot block before
+  // update() starts (setup-only; the loop never blocks).
   Serial.flush();
   delay(500);
 }
@@ -40,7 +36,7 @@ void Machine::update() {
 
     case Mode::STANDBY:
     default:
-      // Nothing active while resting: subsystems are paused, not stopped.
+      // No subsystem ticks while resting.
       break;
   }
 }

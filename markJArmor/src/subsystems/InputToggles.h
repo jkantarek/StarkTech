@@ -22,8 +22,7 @@ class InputToggles {
   // When wired, this should override time-driven transitions in Mode::next.
   bool fireHeld() const;
 
-  // Future state-control surface (held to lock the current Mode, mode cycle
-  // button, long-press to standby, ...). Reserved and stubbed.
+  // Reserved state-control surface (mode lock, cycle, ...); stubbed to 0.
   uint8_t reservedControlFlags() const;
 
  private:

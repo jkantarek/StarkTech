@@ -7,7 +7,7 @@
 // A Mode is a sustained, top-level behavior of the suit (STANDBY, ACTIVATED,
 // ...). It is distinct from the per-pixel step a subsystem takes on each tick.
 // The machine holds exactly one Mode at a time and switches between them via
-// transition().
+// mode::next() (see Machine::update).
 enum class Mode : uint8_t {
   STANDBY,    // idle: future rest state, entered only by input (stubbed)
   ACTIVATED,  // active demo: chest ring crawl runs continuously
