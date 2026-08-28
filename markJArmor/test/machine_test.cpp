@@ -5,8 +5,8 @@
 // Adafruit_NeoPixel.h (records writes). See Makefile.
 //
 // Contract under test (src/subsystems/ChestBuster.cpp):
-//   - setup: ring.begin + setBrightness + attach the loader animation only —
-//     NO recorded writes, no boot transmission
+//   - setup: ring.begin + setBrightness + loader begin only — NO recorded
+//     writes, no boot transmission
 //   - the update() step gate is kStepMs = 100 ms: ticks inside the step
 //     period return without rendering; a tick at/after the boundary renders
 //     ONE FULL FRAME — 24 pixel writes, indices 0..23 — then show()
@@ -37,7 +37,7 @@ int main() {
   m.setup();
 
   // Boot: no recorded writes — begin()/setBrightness() aren't logged, no boot
-  // transmission in this build, and attaching the animation writes nothing.
+  // transmission in this build, and loader begin() writes nothing.
   CHECK(Adafruit_NeoPixel::log.empty());
 
   // Drive 25 ticks at the 10 ms cadence (t=100..340). 100 ms step gate: the

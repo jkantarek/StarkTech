@@ -1,17 +1,16 @@
-// HeadsUpDisplay tests — the generic stats logger. The HUD is the ONE place
-// Serial is used for routine reporting; it renders "[HUD] <name>: <fields>"
-// lines through the (recording) Arduino mock Serial, once per 1000 ms, for
-// every attached subsystem's status().
+// HeadsUpDisplay tests — the generic stats logger. Subsystems expose a
+// `const char* status()` (nullptr = nothing to report) and Machine reports
+// it under a tag; the HUD renders "<submodule>.status - <message>" (e.g.
+// "chest.status - sweep") once per second through the (recording) Arduino
+// mock Serial.
 //
 // Contract under test:
 //   - update() logs immediately on the first call, then every kLogMs
-//   - each attached subsystem contributes a line, in attach order
-//   - subsystems report through the StatusSink seam — the HUD never needs to
-//     know a subsystem's concrete type
-//   - attach() ignores anything beyond kMaxEntries
+//   - report(tag, nullptr) contributes no line
+//   - re-reporting a tag replaces its status (latest wins, no duplicates)
+//   - report() ignores anything beyond kMaxEntries distinct tags
 #include <cstdio>
 #include <string>
-#include <vector>
 
 #include <Arduino.h>
 
@@ -26,71 +25,59 @@ static int fails = 0;
     }                                                                    \
   } while (0)
 
-// Fake subsystem: emits tag + num through the status seam.
-class FakeSub : public Subsystem {
- public:
-  FakeSub() : _tag("x"), _num(0) {}
-  FakeSub(const char* tag, uint32_t num) : _tag(tag), _num(num) {}
-  void status(StatusSink& out) const override {
-    out.field("tag", _tag);
-    out.field("num", _num);
-  }
-
- private:
-  const char* _tag;
-  uint32_t _num;
-};
-
-static size_t countLines() {
-  const std::string& log = SerialClass::log();
-  size_t n = 0;
-  for (size_t i = 0; (i = log.find("[HUD]", i)) != std::string::npos; ++i)
-    ++n;
-  return n;
-}
-
 int main() {
-  FakeSub alpha("alpha", 7);
-  FakeSub beta("beta", 42);
   HeadsUpDisplay hud;
-  hud.attach("alpha", &alpha);
-  hud.attach("beta", &beta);
 
-  // First update logs immediately.
+  // First update logs immediately, in report order; nullptr status is
+  // skipped entirely.
   SerialClass::clear();
+  hud.report("alpha", "one");
+  hud.report("beta", nullptr);
   hud.update(0);
-  CHECK(countLines() == 2);
-  CHECK(SerialClass::log() ==
-        "[HUD] alpha: tag=alpha num=7\n[HUD] beta: tag=beta num=42\n");
+  CHECK(SerialClass::log() == "alpha.status - one\n");
 
-  // 999 ms later: no new log (999 - 0 < 1000).
-  hud.update(999);
-  CHECK(countLines() == 2);
-
-  // At exactly 1000 ms: next log fires.
-  hud.update(1000);
-  CHECK(countLines() == 4);
-  hud.update(1999);
-  CHECK(countLines() == 4);
-  hud.update(2000);
-  CHECK(countLines() == 6);
-
-  // No subsystems attached -> no logging, no crash.
-  HeadsUpDisplay empty;
+  // Re-reporting a tag replaces its status — one line, not two.
   SerialClass::clear();
-  empty.update(0);
+  hud.report("alpha", "two");
+  hud.update(1000);
+  CHECK(SerialClass::log() == "alpha.status - two\n");
+
+  // 999 ms after the last render: nothing (1999 - 1000 < 1000).
+  SerialClass::clear();
+  hud.update(1999);
   CHECK(SerialClass::log().empty());
 
-  // Attach cap: the 9th fake is dropped.
+  // Boundary 1000 ms later, but no new reports: entries were consumed by the
+  // render at t=1000, so nothing stale renders.
+  hud.update(2000);
+  CHECK(SerialClass::log().empty());
+
+  // A fresh report renders at the next boundary.
+  hud.report("alpha", "three");
+  hud.update(3000);
+  CHECK(SerialClass::log() == "alpha.status - three\n");
+
+  // When a status goes back to nullptr the tag's line disappears.
+  SerialClass::clear();
+  hud.report("alpha", nullptr);
+  hud.update(4000);
+  CHECK(SerialClass::log().empty());
+
+  // Tag cap: only kMaxEntries distinct tags are kept; extras are dropped.
   {
-    FakeSub extra[8];  // 8 more, but only kMaxEntries-2 slots free
     HeadsUpDisplay capped;
-    for (int i = 0; i < 8; ++i) capped.attach("x", &extra[i]);
-    capped.attach("alpha", &alpha);
-    capped.attach("beta", &beta);  // dropped silently
     SerialClass::clear();
+    for (int i = 0; i < 9; ++i) {
+      static const char* names[9] = {"a", "b", "c", "d", "e",
+                                     "f", "g", "h", "i"};
+      capped.report(names[i], "x");
+    }
     capped.update(0);
-    CHECK(countLines() == 8);  // not 10
+    size_t lines = 0;
+    const std::string& log = SerialClass::log();
+    for (size_t i = 0; (i = log.find(".status - ", i)) != std::string::npos; ++i)
+      ++lines;
+    CHECK(lines == 8);  // not 9
   }
 
   if (fails == 0) {

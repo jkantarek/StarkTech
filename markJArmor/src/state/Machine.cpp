@@ -2,11 +2,30 @@
 
 #include <Arduino.h>
 
+#ifdef __AVR__
+#ifndef FPSTR
+// Older AVR cores lack FPSTR; it is a reinterpret of a PROGMEM char pointer
+// as the flash-string handle Arduino's Serial can print directly.
+#define FPSTR(p) (reinterpret_cast<const __FlashStringHelper*>(p))
+#endif
+#endif
+
+namespace {
+
+// HUD tags: PROGMEM on AVR so the HUD's flash reads (HUD_CHAR) work; the
+// host mock defines PROGMEM as empty so these are plain RAM literals there.
+const char kTagMode[] PROGMEM = "mode";
+const char kTagChest[] PROGMEM = "chest";
+const char kTagInput[] PROGMEM = "input";
+const char kTagSonic[] PROGMEM = "sonic";
+
+}  // namespace
+
 void Machine::setup() {
   Serial.begin(9600);
   Serial.println(F("start"));
 
-  _chest.setup(&_loader);  // prints its own progress; attach the loader
+  _chest.setup();  // prints its own progress
 
   _mode = Mode::ACTIVATED;
   _modeStartMs = millis();
@@ -39,6 +58,14 @@ void Machine::update() {
       // No subsystem ticks while resting.
       break;
   }
+
+  // Feed the HUD once per tick; it renders every kLogMs. Subsystems with
+  // nothing to report (nullptr) are skipped by report().
+  _hud.report(kTagMode, mode::name(_mode));
+  _hud.report(kTagChest, _chest.status());
+  _hud.report(kTagInput, _input.status());
+  _hud.report(kTagSonic, _sonic.status());
+  _hud.update(now);
 }
 
 Mode Machine::mode() const {
@@ -47,9 +74,10 @@ Mode Machine::mode() const {
 
 void Machine::enterMode(const Mode next, const uint32_t now) {
   Serial.print(F("mode "));
-  Serial.print(mode::name(_mode));
+  // mode::name() returns PROGMEM strings on AVR — print flash-aware.
+  Serial.print(FPSTR(mode::name(_mode)));
   Serial.print(F(" -> "));
-  Serial.println(mode::name(next));
+  Serial.println(FPSTR(mode::name(next)));
 
   _mode = next;
   _modeStartMs = now;

@@ -1,5 +1,11 @@
 #include "Mode.h"
 
+#ifdef __AVR__
+#include <avr/pgmspace.h>
+#else
+#define PROGMEM  // host: plain RAM-backed literals
+#endif
+
 namespace {
 
 // How long STANDBY holds before auto-activating. STANDBY is only reachable
@@ -32,10 +38,22 @@ Mode next(Mode current, const uint32_t elapsedInMode, const InputToggles& input)
 }
 
 const char* name(const Mode m) {
+  // True flash strings (PROGMEM): callers may read them with pgm_read_byte
+  // (HUD) or print them flash-aware (FPSTR). On the host PROGMEM is empty and
+  // the statics are RAM-backed, so plain reads work there.
   switch (m) {
-    case Mode::STANDBY:   return "STANDBY";
-    case Mode::ACTIVATED: return "ACTIVATED";
-    default:              return "?";
+    case Mode::STANDBY: {
+      static const char kStandby[] PROGMEM = "STANDBY";
+      return kStandby;
+    }
+    case Mode::ACTIVATED: {
+      static const char kActivated[] PROGMEM = "ACTIVATED";
+      return kActivated;
+    }
+    default: {
+      static const char kUnknown[] PROGMEM = "?";
+      return kUnknown;
+    }
   }
 }
 

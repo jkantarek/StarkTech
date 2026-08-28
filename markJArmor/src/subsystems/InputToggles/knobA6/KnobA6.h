@@ -18,6 +18,14 @@ class KnobA6 {
   // Normalized position in [min,max] -> 0..100; 0 while unscanned.
   uint8_t percent() const;
 
+  // Clear scan state and re-arm the boot sweep (bounds re-derive from the
+  // next samples).
+  void rescan();
+
+  // HUD status: nullptr until the boot scan completes, then "ready"
+  // (flash literal).
+  const char* status() const { return scanned() ? "ready" : nullptr; }
+
  private:
   static constexpr uint16_t kSampleMs = 20;
   static constexpr uint16_t kSamples = 50;

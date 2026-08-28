@@ -28,6 +28,13 @@ void KnobA6::update(uint32_t now) {
   }
 }
 
+void KnobA6::rescan() {
+  _sampled = false;
+  _samples = 0;
+  _min = 1023;  // inverted: next samples set both bounds again
+  _max = 0;
+}
+
 uint8_t KnobA6::percent() const {
   if (!scanned()) {
     return 0;

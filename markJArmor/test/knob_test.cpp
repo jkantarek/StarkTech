@@ -10,11 +10,13 @@
 //     so a wider sweep rescales; rescan() clears and re-arms
 //   - mapping::percent: raw in [min,max] -> 0..100, clamped; degenerate
 //     (min==max) range -> 0, never divide-by-zero
-//   - status() emits raw/min/max/scan/pct through any StatusSink
+//   - status(): nullptr while unscanned, "ready" once the scan completes
 #include <cstdint>
 #include <cstdio>
 #include <string>
 #include <vector>
+
+#include <Arduino.h>
 
 #include "src/subsystems/InputToggles/knobA6/KnobA6.h"
 #include "src/subsystems/InputToggles/Mappings/Range.h"
@@ -35,18 +37,6 @@ int test_analog_read(uint8_t) {
   if (g_script_i >= g_script.size()) return 0;
   return g_script[g_script_i++];
 }
-
-// Recording StatusSink: captures "name=value" fields in emission order.
-class RecSink : public StatusSink {
- public:
-  std::vector<std::string> fields;
-  void field(const char* name, uint32_t value) override {
-    fields.push_back(std::string(name) + "=" + std::to_string(value));
-  }
-  void field(const char* name, const char* value) override {
-    fields.push_back(std::string(name) + "=" + value);
-  }
-};
 
 int main() {
   // --- mapping::percent ---
@@ -87,10 +77,12 @@ int main() {
       now += 20;
     }
     CHECK(k.scanned());
-    CHECK(k.raw() == 370);    // script[49]
+    CHECK(k.raw() == 370);       // script[49]
     CHECK(k.minRaw() == 50);     // global min
     CHECK(k.maxRaw() == 1000);   // global max
-    CHECK(k.percent() == 33); // (370-50)*100/(1000-50) = 33.68 -> 33
+    CHECK(k.percent() == 33);    // (370-50)*100/(1000-50) = 33.68 -> 33
+    CHECK(k.status() != nullptr);
+    CHECK(k.status()[0] == 'r'); // "ready" once scanned
 
     // Live tracking beyond the scanned bounds rescales min/max.
     g_script = {20, 1023};
@@ -105,34 +97,15 @@ int main() {
     k.update(now);  // t=1020
     CHECK(k.raw() == 1023);
 
-    // rescan clears bounds + scan state and re-arms the sweep.
+    // rescan clears bounds + scan state and re-arms the sweep; status goes
+    // back to nullptr until the scan completes again.
     k.rescan();
     CHECK(!k.scanned());
+    CHECK(k.status() == nullptr);
     now += 20;
     k.update(now);     // t=1040: samples (script exhausted -> 0)
     CHECK(k.raw() == 0);
     CHECK(k.percent() == 0);  // unscanned -> 0
-  }
-
-  // --- status() emits the knob fields ---
-  {
-    KnobA6 k;
-    k.setup();
-    g_script = {10, 400, 800, 200, 600};  // 5 samples: still scanning
-    g_script_i = 0;
-    uint32_t now = 0;
-    for (int s = 0; s < 5; ++s) {
-      k.update(now);
-      now += 20;
-    }
-    RecSink sink;
-    k.status(sink);
-    CHECK(sink.fields.size() == 5);
-    CHECK(sink.fields[0] == "raw=600");
-    CHECK(sink.fields[1] == "min=10");
-    CHECK(sink.fields[2] == "max=800");
-    CHECK(sink.fields[3] == "scan=0");  // 5 < 50
-    CHECK(sink.fields[4] == "pct=0");   // unscanned -> 0
   }
 
   if (fails == 0) {

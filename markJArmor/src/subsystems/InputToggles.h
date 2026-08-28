@@ -2,13 +2,10 @@
 
 #include <stdint.h>
 
-// Reads physical buttons/switches and turns them into the toggle flags the
-// state machine consults, plus exposes the "state control" surface for
-// forcing/blocking mode transitions.
-//
-// STUBBED: no pins are wired yet — every input reports its default (off)
-// state so the machine can be driven by time alone. Wire real pins here when
-// the harness exists.
+// Reads physical buttons/switches and exposes the flags the state machine
+// consults. STUBBED: no pins are wired yet — every input reports its default
+// (off) state so the machine can be driven by time alone. Wire real pins
+// here when the harness exists.
 class InputToggles {
  public:
   // Initialize input pins and report progress. Call once from Machine::setup.
@@ -22,10 +19,6 @@ class InputToggles {
   // When wired, this should override time-driven transitions in Mode::next.
   bool fireHeld() const;
 
-  // Reserved state-control surface (mode lock, cycle, ...); stubbed to 0.
-  uint8_t reservedControlFlags() const;
-
- private:
-  // Placeholder pin reserve for the fire button; unused while stubbed.
-  static constexpr uint8_t kFirePin = 2;
+  // HUD status: nullptr while nothing is wired.
+  const char* status() const { return nullptr; }
 };
