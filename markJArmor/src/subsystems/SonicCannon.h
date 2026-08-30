@@ -11,6 +11,6 @@ class SonicCannon {
   // Pump the audio buffer. Call every machine tick.
   void update();
 
-  // HUD status: "fire" while the blast is playing, "off" after it ends.
+  // HUD status: "fire" while the startup sound plays, "off" after it ends.
   const char* status() const;
 };

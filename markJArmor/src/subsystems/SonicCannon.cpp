@@ -14,47 +14,45 @@
 #define MOZZI_AUDIO_MODE MOZZI_OUTPUT_PWM
 #include <Mozzi.h>
 
-// 16-bit fidelity test: play the source-resolution table (extracted from the
-// original mkv audio, int16_t) instead of the 8-bit cut. Mozzi's Sample<>
-// only accepts int8_t tables (ctor takes `const int8_t *`), so the table is
-// read directly with a Q16.16 phase and handed to MonoOutput::from16Bit() —
-// just fromNBit(16, ...), the full -32768..32767 range on the PWM pin.
+// Startup sound: J.A.R.V.I.S. "At your service, sir" (AtYourServiceSir.h),
+// played once at boot. It is a 16-bit table because Mozzi's Sample<> only
+// accepts int8_t tables (ctor takes `const int8_t *`), so the table is read
+// directly with a Q16.16 phase and handed to MonoOutput::from16Bit() — just
+// fromNBit(16, ...), the full -32768..32767 range on the PWM pin.
 //
-// Revert to the 8-bit Sample path:
-//   #include <Sample.h>
+// The repulsor blast tables stay in this folder (RepulsorBlast1..7.h,
+// RepulsorBlastN-16b.h); swap the include/symbols below to boot with one of
+// those instead:
+//   #include "SonicCannon/RepulsorBlast1-16b.h"  (16-bit mkv extraction; its
+//   27040-sample table is split Part1/Part2 — AVR's 16-bit sizeof caps a flat
+//   array at 32767 bytes, 54080 B does not fit)
+//   or the 8-bit Sample path:  #include <Sample.h>
 //   #include "SonicCannon/RepulsorBlast1.h"
 //   Sample<K_REPULSOR_BLAST_1_SAMPLES, AUDIO_RATE> aBlast(kRepulsorBlast1Samples);
 //     // setup: aBlast.setLoopingOff(); aBlast.setFreq(8000.0f / K_REPULSOR_BLAST_1_SAMPLES); aBlast.start();
 //     // updateAudio: return MonoOutput::from8Bit((int16_t)aBlast.next());
 //     // status(): aBlast.isPlaying()
-#include "SonicCannon/RepulsorBlast1-16b.h"
+#include "SonicCannon/AtYourServiceSir.h"
 
 namespace {
 
-// One-shot player for the 16-bit blast table. Phase is Q16.16: each audio
-// frame advances 8000/16384 of a table sample, so the 27040-sample table
-// replays in 27040/8000 = 3.38 s at natural pitch.
+// One-shot player for the startup table. Phase is Q16.16: each audio frame
+// advances 8000/16384 of a table sample, so the 11611-sample line replays in
+// 11611/8000 = 1.45 s at natural pitch.
 constexpr uint32_t kPhaseStep =
     (8000UL << 16) / static_cast<uint32_t>(AUDIO_RATE);  // 32000 @ 16384
 uint32_t gPhase = 0u;
 bool gPlaying = false;
 
-// Table is split into two halves: AVR's 16-bit sizeof caps a flat array at
-// 32767 bytes, and 27040 int16 = 54080 B does not fit.
 inline int16_t readSample(uint32_t i) {
 #ifdef __AVR__
-  return i < K_REPULSOR_BLAST_1_16B_SAMPLES / 2
-      ? static_cast<int16_t>(pgm_read_word_near(&kRepulsorBlast1_16bSamplesPart1[i]))
-      : static_cast<int16_t>(pgm_read_word_near(
-            &kRepulsorBlast1_16bSamplesPart2[i - K_REPULSOR_BLAST_1_16B_SAMPLES / 2]));
+  return static_cast<int16_t>(pgm_read_word_near(&kAtYourServiceSir16bSamples[i]));
 #else
-  return i < K_REPULSOR_BLAST_1_16B_SAMPLES / 2
-      ? kRepulsorBlast1_16bSamplesPart1[i]
-      : kRepulsorBlast1_16bSamplesPart2[i - K_REPULSOR_BLAST_1_16B_SAMPLES / 2];
+  return kAtYourServiceSir16bSamples[i];
 #endif
 }
 
-void startBlast() {
+void startStartup() {
   gPhase = 0u;
   gPlaying = true;
 }
@@ -69,7 +67,7 @@ AudioOutput updateAudio() {
   int16_t sample = 0;
   if (gPlaying) {
     const uint32_t idx = gPhase >> 16;
-    if (idx >= K_REPULSOR_BLAST_1_16B_SAMPLES) {
+    if (idx >= K_AT_YOUR_SERVICE_SIR_16B_SAMPLES) {
       gPlaying = false;  // one-shot: table exhausted
     } else {
       sample = readSample(idx);
@@ -85,7 +83,7 @@ void SonicCannon::setup() {
 #ifdef __AVR__
   Serial.println(F("sonic: startMozzi (PWM pin 11)"));
   startMozzi();  // control rate 64 Hz
-  startBlast();  // FIRE once at boot
+  startStartup();  // play "At your service, sir" once at boot
 #else
   Serial.println(F("sonic: stub (host build)"));
 #endif
