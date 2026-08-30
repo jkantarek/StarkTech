@@ -51,16 +51,15 @@ void Machine::update() {
   switch (_mode) {
     case Mode::ACTIVATED:
       _chest.update(now);
-      _sonic.update(now, true);  // cannon tone
       break;
 
     case Mode::STANDBY:
     default:
-      // Pump silence in rest modes so the PWM output rests at 0 (no DC
-      // click on mode change).
-      _sonic.update(now, false);
+      // No subsystem ticks while resting.
       break;
   }
+
+  _sonic.update();  // pumps audio; one-shot blast fired at boot
 
   // Feed the HUD once per tick; it renders every kLogMs. Subsystems with
   // nothing to report (nullptr) are skipped by report().

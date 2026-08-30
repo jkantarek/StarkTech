@@ -75,7 +75,10 @@ void HeadsUpDisplay::update(const uint32_t now) {
     off += copyString(_line + off, sizeof(_line) - off, kSep);
     off += copyString(_line + off, sizeof(_line) - off, _entries[i].status);
     Serial.println(_line);
-    Serial.flush();  // drain TX before the next ring show()
+    // No per-line flush: at 9600 baud that blocks ~1 ms/char (~70 ms per
+    // render), starving Mozzi's audio buffer into audible gaps. println
+    // buffers and the UART drains continuously; the boot block in
+    // Machine::setup keeps its own flush.
   }
   _count = 0;  // entries are replaced next cycle, not appended forever
 }
