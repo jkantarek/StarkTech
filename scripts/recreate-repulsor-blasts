@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# Re-create markJArmor/src/subsystems/SonicCannon/RepulsorBlastN.h from the
+# repulsor_blast_N.wav sources at the repo root, using Mozzi's char2mozzi.py.
+#
+# Pipeline per file:
+#   wav (RIFF, 8-bit unsigned PCM, mono) -> headerless signed 8-bit raw
+#     -> char2mozzi.py (upstream converter, verbatim local copy) -> canonical
+#     repo header (same symbols/format as the checked-in files).
+#
+# Notes:
+# - WAV 8-bit PCM is unsigned (center 128); char2mozzi wants signed, so the
+#   raw stage does sample - 128. The data chunk is located by walking the
+#   RIFF chunks (offset 78 for these files, but robust to extra chunks).
+# - char2mozzi's "33, 33, 33" dither is a mega2560 flash-upload workaround.
+#   This board is an ATmega1280 and the reference headers carry raw wav data,
+#   so the driver takes the source-wav samples instead of the dithered ones
+#   (and asserts the emitted table is exactly wav - 128).
+# - Deterministic and idempotent: regeneration reproduces the checked-in
+#   headers byte-for-byte.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+OUT_DIR="$ROOT/markJArmor/src/subsystems/SonicCannon"
+CHAR2MOZZI="$SCRIPT_DIR/char2mozzi.py"
+
+# Python: $PYTHON override, else the repo-pinned asdf python, else PATH.
+if [ -n "${PYTHON:-}" ]; then
+  PY="$PYTHON"
+elif [ -x "$HOME/.asdf/installs/python/3.11.11/bin/python" ]; then
+  PY="$HOME/.asdf/installs/python/3.11.11/bin/python"
+else
+  PY="$(command -v python3 || true)"
+  [ -n "$PY" ] || { echo "no python interpreter (set PYTHON=...)" >&2; exit 1; }
+fi
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+shopt -s nullglob
+WAVS=("$ROOT"/repulsor_blast_*.wav)
+if [ ${#WAVS[@]} -eq 0 ]; then
+  echo "no repulsor_blast_*.wav in $ROOT" >&2
+  exit 1
+fi
+
+for wav in "${WAVS[@]}"; do
+  n="$(basename "$wav" | sed -E 's/^repulsor_blast_([0-9]+)\.wav$/\1/')"
+  raw="$WORK/repulsor_blast_$n.raw"
+  mozzi="$WORK/repulsor_blast_$n.mozzi.h"
+  out="$OUT_DIR/RepulsorBlast$n.h"
+
+  echo "==> $wav -> $out"
+
+  # 1) Strip the WAV header; convert unsigned 8-bit PCM to signed (sample-128).
+  "$PY" - "$wav" "$raw" <<'PY'
+import array, sys
+wav, raw = sys.argv[1], sys.argv[2]
+data = open(wav, 'rb').read()
+assert data[:4] == b'RIFF' and data[8:12] == b'WAVE', wav + ' is not a RIFF/WAVE file'
+i = 12
+while i + 8 <= len(data):
+    cid = data[i:i+4]
+    size = int.from_bytes(data[i+4:i+8], 'little')
+    if cid == b'data':
+        i += 8
+        break
+    i += 8 + size + (size & 1)
+dsize = int.from_bytes(data[i-4:i], 'little')
+samples = array.array('b', (b - 128 for b in data[i:i+dsize]))
+assert len(samples) == dsize, 'short data chunk in ' + wav
+open(raw, 'wb').write(samples.tobytes())
+PY
+
+  # 2) char2mozzi.py: raw signed 8-bit -> Mozzi table (its native format).
+  "$PY" "$CHAR2MOZZI" "$raw" "$mozzi" "K_REPULSOR_BLAST_$n" 8000 >/dev/null
+
+  # 3) Reformat into the repo's canonical header; restore any mega2560 dither.
+  "$PY" - "$mozzi" "$wav" "$out" <<'PY'
+import re, sys
+mozzi, wav, out = sys.argv[1], sys.argv[2], sys.argv[3]
+n = re.search(r'RepulsorBlast(\d+)', out).group(1)
+
+# char2mozzi's table: pull the ints out of its native header output.
+text = open(mozzi).read()
+body = re.search(r'= \{(.*)\};', text, re.S).group(1)
+vals = [int(x) for x in re.findall(r'-?\d+', body)]
+
+# Source wav data, unsigned -> signed.
+data = open(wav, 'rb').read()
+i = 12
+while i + 8 <= len(data):
+    size = int.from_bytes(data[i+4:i+8], 'little')
+    if data[i:i+4] == b'data':
+        i += 8
+        break
+    i += 8 + size + (size & 1)
+src = [b - 128 for b in data[i:i+len(vals)]]
+assert len(vals) == len(src), '%d table vs %d wav samples' % (len(vals), len(src))
+# char2mozzi dithers one sample of any "33, 33, 33" run (mega2560 flash
+# upload workaround). This board is an ATmega1280 and the checked-in headers
+# carry raw wav data, so take the source samples where they differ.
+dithers = [k for k in range(len(vals)) if vals[k] != src[k]]
+if dithers:
+    print('    note: restored %d dithered sample(s) at %s' % (len(dithers), dithers))
+    vals = src
+
+lines = ['#pragma once', '', '#include <stdint.h>', '',
+         '// Repulsor blast %s - 8-bit signed (int8_t), 8000 Hz, mono.' % n,
+         '// Extracted from "Iron Man Repulsor Blast Sound FX [vDCqBWZLdAA].mkv"',
+         '// (region %s of 7, resampled to 8000 Hz, loudnorm -14 LUFS / -1.0 dBTP).' % n,
+         '// %d samples (~%.2f s). Play at 8 kHz: Sample' % (len(src), len(src) / 8000.0),
+         '// setFreq(8000) at AUDIO_RATE = 16384 (natural pitch/timing).',
+         '#define K_REPULSOR_BLAST_%s_SAMPLES %du' % (n, len(src)), '',
+         '#ifdef __AVR__', '#include <avr/pgmspace.h>', '#else', '#define PROGMEM',
+         '#endif', '',
+         'static const int8_t kRepulsorBlast%sSamples[K_REPULSOR_BLAST_%s_SAMPLES] PROGMEM = {' % (n, n)]
+for start in range(0, len(src), 24):
+    line = '  ' + ', '.join(str(x) for x in src[start:start + 24])
+    if start + 24 < len(src):
+        line += ','
+    lines.append(line)
+lines.append('};')
+open(out, 'w').write('\n'.join(lines) + '\n')
+print('    wrote %s (%d samples)' % (out, len(src)))
+PY
+done
+
+echo "done: regenerated headers in $OUT_DIR"
