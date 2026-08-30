@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Re-create markJArmor/src/subsystems/SonicCannon/RepulsorBlastN-16b.h at full
+# source resolution, straight from the ORIGINAL audio track of
+#   "Iron Man Repulsor Blast Sound FX [vDCqBWZLdAA].mkv"  (Opus 48 kHz stereo)
+# using ffmpeg — not by upscaling the lossy 8-bit wav cuts.
+#
+# Per region N:
+#   mkv -> trim to region N -> mono -> 8 kHz -> loudnorm=I=-14:TP=-1.0
+#         (ffmpeg single-pass dynamic; lands ~ -17.8 LUFS -> level-matches the
+#         original 8-bit wavs' measured -17.2 LUFS within 0.6 dB)
+#         -> pcm_s16le -> int16 table header
+#
+# Region start offsets (seconds in the mkv) were located by normalized
+# envelope cross-correlation of the original 8-bit wav cuts against the mkv's
+# decoded audio (all regions ncc >= 0.998); region durations are the original
+# cuts' sample counts, which the extraction reproduces exactly.
+#
+# Note: the original wavs are not bit-reproducible from this mkv (their
+# exact loudnorm realization/version and mono downmix differ; envelope shape
+# matches ~0.996). This pipeline emits the true 16-bit source resolution
+# (no 8-bit quantization) at a level consistent with the 8-bit wavs.
+#
+# Usage: recreate-repulsor-blasts-16b [N ...]     (default: all 1..7)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+OUT_DIR="$ROOT/markJArmor/src/subsystems/SonicCannon"
+MKV="$ROOT/Iron Man Repulsor Blast Sound FX [vDCqBWZLdAA].mkv"
+
+# Python: $PYTHON override, else the repo-pinned asdf python, else PATH.
+if [ -n "${PYTHON:-}" ]; then
+  PY="$PYTHON"
+elif [ -x "$HOME/.asdf/installs/python/3.11.11/bin/python" ]; then
+  PY="$HOME/.asdf/installs/python/3.11.11/bin/python"
+else
+  PY="$(command -v python3 || true)"
+  [ -n "$PY" ] || { echo "no python interpreter (set PYTHON=...)" >&2; exit 1; }
+fi
+command -v ffmpeg >/dev/null || { echo "ffmpeg required" >&2; exit 1; }
+
+# Region N -> start offset in the mkv (s), located by envelope correlation.
+# Region N -> sample count at 8 kHz (from the original cuts / header defines).
+declare -A RSTART=(  [1]=0.880  [2]=6.460  [3]=10.190 [4]=13.810
+                     [5]=17.840 [6]=25.180 [7]=29.610 )
+declare -A RSAMPLES=( [1]=27040 [2]=26720  [3]=18240  [4]=23120
+                      [5]=32240 [6]=29840  [7]=32240 )
+
+NUMS=("$@")
+if [ ${#NUMS[@]} -eq 0 ]; then NUMS=(1 2 3 4 5 6 7); fi
+[ -f "$MKV" ] || { echo "missing $MKV" >&2; exit 1; }
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+for n in "${NUMS[@]}"; do
+  out="$OUT_DIR/RepulsorBlast$n-16b.h"
+  expected="${RSAMPLES[$n]:-}"
+  start="${RSTART[$n]:-}"
+  [ -n "$expected" ] && [ -n "$start" ] || { echo "no region data for N=$n" >&2; exit 1; }
+
+  echo "==> region $n (mkv @ ${start}s) -> $out"
+  wav="$WORK/r$n.wav"
+  ffmpeg -v error -y -i "$MKV" -ss "$start" -t "$(awk -v s="$expected" 'BEGIN{printf "%.6f", s/8000}')" \
+    -vn -ac 1 -ar 8000 -af loudnorm=I=-14:TP=-1.0 -c:a pcm_s16le "$wav"
+
+  "$PY" - "$wav" "$out" "$n" "$expected" <<'PY'
+import sys
+wav, out, n, expected = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+data = open(wav, 'rb').read()
+assert data[:4] == b'RIFF' and data[8:12] == b'WAVE', wav + ' not RIFF/WAVE'
+i = 12
+while i + 8 <= len(data):
+    cid, size = data[i:i+4], int.from_bytes(data[i+4:i+8], 'little')
+    if cid == b'data':
+        i += 8
+        break
+    i += 8 + size + (size & 1)
+dsize = int.from_bytes(data[i-4:i], 'little')
+samples = [int.from_bytes(data[i+2*k:i+2*k+2], 'little', signed=True)
+           for k in range(dsize // 2)]
+assert len(samples) == expected, 'region %s: got %d samples, expected %d' % (n, len(samples), expected)
+
+lo, hi = min(samples), max(samples)
+# AVR's sizeof is 16-bit, so no flat array may exceed 32767 bytes; the
+# 16-bit table (27040 int16 = 54080 B) is therefore emitted as two halves.
+half = len(samples) // 2
+assert len(samples) % 2 == 0 and half <= 16383 and len(samples) - half <= 16383, 'split halves exceed AVR array limit'
+lines = ['#pragma once', '', '#include <stdint.h>', '',
+         '// Repulsor blast %s - 16-bit signed (int16_t), 8000 Hz, mono.' % n,
+         '// Extracted from the original audio track of',
+         '// "Iron Man Repulsor Blast Sound FX [vDCqBWZLdAA].mkv" (Opus 48 kHz',
+         '// stereo) with ffmpeg: trim to region %s of 7, mono, 8 kHz,' % n,
+         '// loudnorm single-pass I=-14:TP=-1.0 (~-17.8 LUFS, level-matching',
+         '// the 8-bit wavs), pcm_s16le. Full source resolution (no 8-bit',
+         '// quantization); shape matches RepulsorBlast%s.h (env ncc ~0.996).' % n,
+         '// %d samples (~%.2f s), range %d..%d.' % (len(samples), len(samples) / 8000.0, lo, hi),
+         '// AVR sizeof is 16-bit (max 32767-byte flat array), so the table',
+         '// is split into two halves; index part 2 at idx - %d.' % half,
+         '// Playback: Mozzi Sample<> is int8_t-only; index this table manually',
+         '// (e.g. Phasor + lookup) and output via MonoOutput::from16Bit().',
+         '#define K_REPULSOR_BLAST_%s_16B_SAMPLES %du' % (n, len(samples)), '',
+         '#ifdef __AVR__', '#include <avr/pgmspace.h>', '#else', '#define PROGMEM',
+         '#endif', '']
+for part, chunk in (('Part1', samples[:half]), ('Part2', samples[half:])):
+    lines.append('static const int16_t kRepulsorBlast%s_16bSamples%s[%d] PROGMEM = {' % (n, part, len(chunk)))
+    for start in range(0, len(chunk), 12):
+        line = '  ' + ', '.join(str(x) for x in chunk[start:start + 12])
+        if start + 12 < len(chunk):
+            line += ','
+        lines.append(line)
+    lines.append('};')
+    lines.append('')
+open(out, 'w').write('\n'.join(lines) + '\n')
+print('    wrote %s (%d samples, %d..%d)' % (out, len(samples), lo, hi))
+PY
+done
+
+echo "done"

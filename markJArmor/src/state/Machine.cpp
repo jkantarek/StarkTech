@@ -26,7 +26,7 @@ void Machine::setup() {
   Serial.println(F("start"));
 
   _chest.setup();   // prints its own progress
-  _sonic.setup();   // starts Mozzi (pins 11+12 hifi audio)
+  _sonic.setup();   // starts Mozzi (single-pin PWM on pin 11)
 
   _mode = Mode::ACTIVATED;
   _modeStartMs = millis();
